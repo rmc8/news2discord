@@ -1,0 +1,12 @@
+[ai.summarization]
+model = "gpt-5-nano"
+temperature = 0.1
+system_prompt = """
+"""
+
+[notifications.discord]
+webhook_url = ""
+
+[[feeds]]
+name = ""
+url = ""
