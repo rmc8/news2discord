@@ -139,12 +139,16 @@ class News2Discord:
                 continue
             for item in results:
                 # Replace with actual downstream processing (e.g., Discord notify)
-                print(
-                    {
-                        "published_jst": item.get("published_jst"),
-                        "title": item.get("title"),
-                        "url": item.get("url"),
-                        "site": item.get("site_name"),
-                        "chars": item.get("text_length"),
-                    }
-                )
+                text = item.get("text")
+                if text:
+                    print(
+                        {
+                            "published_jst": item.get("published_jst"),
+                            "title": item.get("title"),
+                            "url": item.get("url"),
+                            "site": item.get("site_name"),
+                            "chars": item.get("text_length"),
+                        }
+                    )
+                    print(text)
+                    exit()

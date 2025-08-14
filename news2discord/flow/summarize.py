@@ -1,0 +1,2 @@
+def summarize(state):
+    pass
