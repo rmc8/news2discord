@@ -7,26 +7,28 @@ from typing import Any, Dict, List, Optional, cast
 import feedparser
 import pandas as pd
 from newspaper import Article
+from tqdm import tqdm
 
+from .flow import run as flow_run
 from .models.config import ConfigModel, FeedConfigModel
 from .models import OutputRecord, ArticleRecord
+from .models.notification import NotificationModel
 
 logger = getLogger(__name__)
-logger.setLevel("WARNING")
+logger.setLevel("INFO")
 
 
 class News2Discord:
     USE_COL = ["title", "link", "published_jst", "site_name"]
 
     def __init__(self, config: ConfigModel, offset: int = 1):
-        if offset < 1:
-            raise ValueError("Offset must be greater than or equal to 1")
-        elif not isinstance(offset, int):
+        if not isinstance(offset, int):
             raise TypeError("Offset must be an integer")
+        elif offset < 1:
+            raise ValueError("Offset must be greater than or equal to 1")
         # init
-        ai_config = config.get("ai", {})
+        self.config = config
         self.feeds: List[FeedConfigModel] = config.get("feeds", [])
-        self.summarization_config: Dict[str, Any] = ai_config.get("summarization", {})
         self.notifications: Dict[str, Any] = config.get("notifications", {})
         self.offset: int = offset
 
@@ -131,24 +133,29 @@ class News2Discord:
                 outputs.append(out)
         return outputs
 
+    def _notify(self, notifications: list[NotificationModel]):
+        for notification in tqdm(notifications, desc="Notifying"):
+            pass
+
     def run(self):
+        fetched_feeds: list[OutputRecord] = []
+        notifications: list[NotificationModel] = []
         run_time = self._now_jst()
-        for feed in self.feeds:
+        for feed in tqdm(self.feeds, desc="Processing feeds"):
             results = self._process_feed(feed, run_time)
-            if not results:
-                continue
-            for item in results:
-                # Replace with actual downstream processing (e.g., Discord notify)
-                text = item.get("text")
-                if text:
-                    print(
-                        {
-                            "published_jst": item.get("published_jst"),
-                            "title": item.get("title"),
-                            "url": item.get("url"),
-                            "site": item.get("site_name"),
-                            "chars": item.get("text_length"),
-                        }
+            fetched_feeds.extend(results)
+        for item in tqdm(fetched_feeds, desc="Processing articles"):
+            # Replace with actual downstream processing (e.g., Discord notify)
+            if item.get("text"):
+                result = flow_run(item, self.config)
+                if result.get("is_high_quality"):
+                    notification = NotificationModel(
+                        title=item["title"],
+                        url=item["url"],
+                        eyecatch=item["eyecatch"],
+                        site_name=item["site_name"],
+                        summary=result["summary"],
+                        keywords=result["keywords"],
                     )
-                    print(text)
-                    exit()
+                    notifications.append(notification)
+                    self._notify(notifications)
