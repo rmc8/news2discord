@@ -1,8 +1,9 @@
+import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from logging import getLogger
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional
 
 import feedparser
 import pandas as pd
@@ -13,6 +14,7 @@ from .flow import run as flow_run
 from .models.config import ConfigModel, FeedConfigModel
 from .models import OutputRecord, ArticleRecord
 from .models.notification import NotificationModel
+from .notification import discord
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")
@@ -136,11 +138,25 @@ class News2Discord:
                 outputs.append(out)
         return outputs
 
-    def _notify(self, notifications: list[NotificationModel]):
-        for notification in tqdm(notifications, desc="Notifying"):
-            pass
+    async def _notify(self, notifications: list[NotificationModel]):
+        # レート制限を考慮して通知を送信（1秒間に最大3回）
+        for i, notification in enumerate(notifications):
+            try:
+                await discord.notification(notification, self.config)
+                logger.info(
+                    f"Sent notification {i + 1}/{len(notifications)}: {notification.title}"
+                )
 
-    def run(self):
+                # レート制限回避のため待機（最後の通知以外）
+                if i < len(notifications) - 1:
+                    await asyncio.sleep(0.4)  # 1秒間に最大2.5回
+
+            except Exception as e:
+                logger.error(f"Failed to send notification {i + 1}: {e}")
+                # エラーが発生しても続行
+                continue
+
+    async def run(self):
         fetched_feeds: list[OutputRecord] = []
         notifications: list[NotificationModel] = []
         run_time = self._now_jst()
@@ -161,4 +177,6 @@ class News2Discord:
                         keywords=result["keywords"],
                     )
                     notifications.append(notification)
-                    self._notify(notifications)
+        # すべての通知を一括で処理
+        if notifications:
+            await self._notify(notifications)

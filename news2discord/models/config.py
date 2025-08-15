@@ -25,6 +25,8 @@ class AiConfigModel(TypedDict):
 
 class DiscordConfigModel(TypedDict):
     webhook_url: str
+    rate_limit_delay: float  # 通知間の待機時間（秒）
+    max_retries: int  # 最大リトライ回数
 
 
 class NotificationConfigModel(TypedDict):

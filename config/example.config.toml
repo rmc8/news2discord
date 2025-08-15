@@ -30,7 +30,9 @@ system_prompt = """
 
 
 [notifications.discord]
-webhook_url = ""
+webhook_url = "https://discord.com/api/webhooks/xxx/yyy"
+rate_limit_delay = 0.4  # 通知間の待機時間（秒）
+max_retries = 3  # 最大リトライ回数
 
 [[feeds]]
 name = ""
