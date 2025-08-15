@@ -1,8 +1,9 @@
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from logging import getLogger
+from logging import getLogger, StreamHandler, INFO
 from typing import Any, Dict, List, Optional
 
 import feedparser
@@ -17,7 +18,17 @@ from .models.notification import NotificationModel
 from .notification import discord
 
 logger = getLogger(__name__)
-logger.setLevel("INFO")
+logger.setLevel(INFO)
+
+# ログハンドラーの設定
+if not logger.handlers:
+    handler = StreamHandler()
+    handler.setLevel(INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 
 class News2Discord:
@@ -33,6 +44,12 @@ class News2Discord:
         self.feeds: List[FeedConfigModel] = config.get("feeds", [])
         self.notifications: Dict[str, Any] = config.get("notifications", {})
         self.offset: int = offset
+
+        # 必須設定の検証
+        if not self.feeds:
+            raise ValueError("設定ファイルにfeedsが定義されていません")
+        if not self.notifications.get("discord", {}).get("webhook_url"):
+            raise ValueError("Discord webhook URLが設定されていません")
 
     @staticmethod
     def _parse_feed(feed: FeedConfigModel):
@@ -139,7 +156,12 @@ class News2Discord:
         return outputs
 
     async def _notify(self, notifications: list[NotificationModel]):
-        # レート制限を考慮して通知を送信（1秒間に最大3回）
+        # 設定からレート制限値を取得
+        rate_limit_delay = self.config["notifications"]["discord"].get(
+            "rate_limit_delay", 0.4
+        )
+
+        # レート制限を考慮して通知を送信
         for i, notification in enumerate(notifications):
             try:
                 await discord.notification(notification, self.config)
@@ -149,7 +171,7 @@ class News2Discord:
 
                 # レート制限回避のため待機（最後の通知以外）
                 if i < len(notifications) - 1:
-                    await asyncio.sleep(0.4)  # 1秒間に最大2.5回
+                    await asyncio.sleep(rate_limit_delay)
 
             except Exception as e:
                 logger.error(f"Failed to send notification {i + 1}: {e}")

@@ -11,11 +11,6 @@ logger.setLevel("INFO")
 
 COLOR_MAP = {"ACCENT": 0x009999}
 
-# レート制限設定
-RATE_LIMIT_DELAY = 0.4  # 秒
-MAX_RETRIES = 3
-RETRY_DELAY = 1.0  # 秒
-
 
 async def notification(notification: NotificationModel, config: ConfigModel) -> None:
     webhook_url = config["notifications"]["discord"]["webhook_url"]
@@ -23,7 +18,10 @@ async def notification(notification: NotificationModel, config: ConfigModel) -> 
         logger.error("Discord webhook URL is not configured")
         return
 
-    for attempt in range(MAX_RETRIES):
+    max_retries = config["notifications"]["discord"].get("max_retries", 3)
+    retry_delay = 1.0  # 秒
+
+    for attempt in range(max_retries):
         try:
             async with aiohttp.ClientSession() as session:
                 webhook = discord.Webhook.from_url(webhook_url, session=session)
@@ -48,10 +46,10 @@ async def notification(notification: NotificationModel, config: ConfigModel) -> 
         except discord.HTTPException as e:
             if e.status == 429:  # Rate limited
                 retry_after = (
-                    e.retry_after if hasattr(e, "retry_after") else RETRY_DELAY
+                    e.retry_after if hasattr(e, "retry_after") else retry_delay
                 )
                 logger.warning(
-                    f"Rate limited, retrying in {retry_after}s (attempt {attempt + 1}/{MAX_RETRIES})"
+                    f"Rate limited, retrying in {retry_after}s (attempt {attempt + 1}/{max_retries})"
                 )
                 await asyncio.sleep(retry_after)
             else:
@@ -59,12 +57,12 @@ async def notification(notification: NotificationModel, config: ConfigModel) -> 
                 break
         except aiohttp.ClientError as e:
             logger.error(f"Network error while sending notification: {e}")
-            if attempt < MAX_RETRIES - 1:
-                await asyncio.sleep(RETRY_DELAY)
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
         except Exception as e:
             logger.error(f"Unexpected error while sending notification: {e}")
             break
 
     logger.error(
-        f"Failed to send notification after {MAX_RETRIES} attempts: {notification.title}"
+        f"Failed to send notification after {max_retries} attempts: {notification.title}"
     )
