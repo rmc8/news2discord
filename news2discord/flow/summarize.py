@@ -8,17 +8,17 @@ from ..models.flow import State, SummaryModel
 
 def summarize(state: State) -> dict[str, Any]:
     llm = ChatOpenAI(
-        model=state["config"]["ai"]["judge"]["model"],
-        temperature=state["config"]["ai"]["judge"]["temperature"],
+        model=state["config"]["ai"]["summarization"]["model"],
+        temperature=state["config"]["ai"]["summarization"]["temperature"],
     )
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", state["config"]["ai"]["summarize"]["system_prompt"]),
+            ("system", state["config"]["ai"]["summarization"]["system_prompt"]),
             ("user", "記事の内容: {text}"),
         ]
     )
     chain = prompt | llm.with_structured_output(SummaryModel)
-    result = chain.invoke(state["text"])
+    result = chain.invoke({"text": state["text"]})
     return {
         "summary": result.summary,
         "keywords": result.keywords,

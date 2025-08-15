@@ -1,4 +1,4 @@
-[ai.summarize]
+[ai.summarization]
 model = "gpt-5"
 temperature = 0.1
 system_prompt = """

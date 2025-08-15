@@ -9,8 +9,15 @@ class SummarizationConfigModel(TypedDict):
     system_prompt: str
 
 
+class JudgeConfigModel(TypedDict):
+    model: str
+    temperature: float
+    system_prompt: str
+
+
 class AiConfigModel(TypedDict):
     summarization: SummarizationConfigModel
+    judge: JudgeConfigModel
 
 
 # Notification

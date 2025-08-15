@@ -13,12 +13,12 @@ def judge(state: State) -> dict[str, Any]:
     )
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", state["config"]["ai"]["summarize"]["system_prompt"]),
-            ("user", "要約の内容: {text}"),
+            ("system", state["config"]["ai"]["judge"]["system_prompt"]),
+            ("user", "要約の内容: {summary}"),
         ]
     )
     chain = prompt | llm.with_structured_output(JudgeModel)
-    result = chain.invoke(state["summary"])
+    result = chain.invoke({"summary": state["summary"]})
     return {
         "is_high_quality": result.is_high_quality,
     }

@@ -89,7 +89,7 @@ class News2Discord:
         try:
             art = self._fetch_article(url, language="ja")
         except Exception as e:
-            logger.warning(f"Failed to fetch article: {url} ({e})")
+            logger.warning(f"Failed to fetch article: {url} ({type(e).__name__}: {e})")
             return None
         # Normalize and type-narrow fields for OutputRecord
         feed_title = str(base.get("title") or "")
@@ -97,8 +97,11 @@ class News2Discord:
         published_raw = base.get("published_jst")
         if isinstance(published_raw, pd.Timestamp):
             published_jst = published_raw.to_pydatetime()
+        elif isinstance(published_raw, datetime):
+            published_jst = published_raw
         else:
-            published_jst = cast(datetime, published_raw)
+            logger.warning(f"Invalid published_jst format: {type(published_raw)}")
+            return None
 
         title_value = art["title"] or feed_title
 
@@ -152,7 +155,7 @@ class News2Discord:
                     notification = NotificationModel(
                         title=item["title"],
                         url=item["url"],
-                        eyecatch=item["eyecatch"],
+                        top_image=item["top_image"],
                         site_name=item["site_name"],
                         summary=result["summary"],
                         keywords=result["keywords"],
