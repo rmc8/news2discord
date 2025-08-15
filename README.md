@@ -10,6 +10,7 @@ RSSフィードから記事を取得し、AIで要約・品質判定を行って
 - **品質判定**: AIによる記事品質の自動判定（高品質記事のみ通知）
 - **Discord通知**: レート制限対応のDiscord Webhook通知
 - **非同期処理**: 効率的な非同期処理による高速化
+- **環境変数管理**: .envファイルによるAPIキー管理
 
 ## 🏗️ アーキテクチャ
 
@@ -43,6 +44,7 @@ graph TB
         subgraph "設定管理"
             Config[TOML設定]
             Models[Pydanticモデル]
+            Env[.env環境変数]
         end
     end
     
@@ -56,6 +58,7 @@ graph TB
     DiscordClient --> Discord
     OpenAI --> LangGraph
     Config --> Models
+    Env --> LangGraph
     Models --> News2Discord
     
     style RSS fill:#e1f5fe
@@ -75,6 +78,7 @@ sequenceDiagram
     participant D as Discord
     
     M->>N: 非同期実行開始
+    Note over M: .envファイル読み込み
     N->>F: RSSフィード取得
     F-->>N: 記事リスト
     
@@ -119,18 +123,19 @@ flowchart TD
 
 ### 処理フロー詳細
 
-1. **フィード取得**: 設定されたRSSフィードから記事を取得
-2. **時間フィルタリング**: 指定時間（デフォルト1時間前）以降の記事を抽出
-3. **記事解析**: 各記事のURLから本文、タイトル、画像を抽出
-4. **AI処理**: LangGraphを使用した要約と品質判定のパイプライン
-5. **通知送信**: 高品質と判定された記事のみDiscordに通知
+1. **環境変数読み込み**: .envファイルからAPIキーを読み込み
+2. **フィード取得**: 設定されたRSSフィードから記事を取得
+3. **時間フィルタリング**: 指定時間（デフォルト1時間前）以降の記事を抽出
+4. **記事解析**: 各記事のURLから本文、タイトル、画像を抽出
+5. **AI処理**: LangGraphを使用した要約と品質判定のパイプライン
+6. **通知送信**: 高品質と判定された記事のみDiscordに通知
 
 ## 📋 セットアップ
 
 ### 前提条件
 
 - Python 3.12以上
-- OpenAI API キー（環境変数 `OPENAI_API_KEY` で設定）
+- OpenAI API キー
 
 ### 1. 依存関係のインストール
 
@@ -139,19 +144,41 @@ flowchart TD
 uv sync
 ```
 
-### 2. 設定ファイルの準備
+### 2. 環境変数の設定
+
+#### 方法1: .envファイルを使用（推奨）
+
+```bash
+# 環境変数ファイルの準備
+cp env.example .env
+
+# .envファイルを編集してAPIキーを設定
+# OPENAI_API_KEY=your-actual-api-key-here
+```
+
+#### 方法2: 環境変数を直接設定
+
+```bash
+# Linux/macOS
+export OPENAI_API_KEY="your-api-key-here"
+
+# Windows
+set OPENAI_API_KEY=your-api-key-here
+```
+
+### 3. 設定ファイルの準備
 
 ```bash
 cp config/example.config.toml config/config.toml
 ```
 
-### 3. 設定ファイルの編集
+### 4. 設定ファイルの編集
 
 `config/config.toml` を編集して以下を設定：
 
 ```toml
 [ai.summarization]
-model = "gpt-5-mini"  # 使用するOpenAIモデル
+model = "gpt-5"  # 使用するOpenAIモデル
 temperature = 0.1
 system_prompt = "記事の要約プロンプト"
 
@@ -177,6 +204,9 @@ url = "https://techcrunch.com/feed/"
 ```bash
 # 1時間前からの記事を処理
 uv run main.py
+
+# または
+python main.py
 ```
 
 ### カスタムオフセット
@@ -185,6 +215,26 @@ uv run main.py
 # 3時間前からの記事を処理
 uv run main.py --offset=3
 ```
+
+### cronでの定期実行
+
+Linuxでcronを使用して定期実行する場合：
+
+```bash
+# crontabを編集
+crontab -e
+
+# 毎時0分に実行（1時間前からの記事を処理）
+0 * * * * cd /path/to/news2discord && /usr/local/bin/uv run main.py
+
+# 30分ごとに実行（30分前からの記事を処理）
+*/30 * * * * cd /path/to/news2discord && /usr/local/bin/uv run main.py --offset=0.5
+
+# 毎日午前9時に実行（24時間前からの記事を処理）
+0 9 * * * cd /path/to/news2discord && /usr/local/bin/uv run main.py --offset=24
+```
+
+**注意**: cronでは環境変数が読み込まれないため、`.env`ファイルを使用することを推奨します。
 
 ### コマンドライン引数
 
@@ -213,6 +263,9 @@ uv run main.py --offset=3
 - `name`: フィードの表示名
 - `url`: RSSフィードのURL
 
+### 環境変数設定 (`.env`)
+- `OPENAI_API_KEY`: OpenAI APIキー（必須）
+
 ## 🔧 開発
 
 ### 開発環境のセットアップ
@@ -233,6 +286,8 @@ uv run ruff check .
 ```
 news2discord/
 ├── main.py                 # エントリーポイント
+├── env.example             # 環境変数例
+├── .env                    # 環境変数（.gitignore）
 ├── news2discord/
 │   ├── __init__.py        # メインクラス
 │   ├── models/            # データモデル
@@ -265,9 +320,20 @@ news2discord/
    → 設定ファイルの `webhook_url` を正しく設定してください
 
 3. **OpenAI API エラー**
-   → 環境変数 `OPENAI_API_KEY` が正しく設定されているか確認してください
+   ```
+   警告: OPENAI_API_KEYが設定されていません
+   ```
+   → `.env`ファイルまたは環境変数で `OPENAI_API_KEY` を設定してください
+   ```bash
+   # .envファイルを使用（推奨）
+   cp env.example .env
+   # .envファイルを編集してAPIキーを設定
+   ```
 
-4. **レート制限エラー**
+4. **cronで環境変数が読み込まれない**
+   → `.env`ファイルを使用してください。cronでは環境変数が継承されません。
+
+5. **レート制限エラー**
    → `rate_limit_delay` の値を増やしてレート制限を回避してください
 
 ## 📝 ログ
@@ -279,6 +345,15 @@ news2discord/
 - `ERROR`: エラー情報
 
 ログフォーマット: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
+
+### 起動時のログ例
+
+```
+環境変数を読み込みました: /path/to/.env
+設定ファイルを読み込みました: /path/to/config/config.toml
+Processing feeds: 100%|██████████| 3/3 [00:05<00:00]
+Processing articles: 100%|██████████| 15/15 [01:23<00:00]
+```
 
 ## 🤝 貢献
 
