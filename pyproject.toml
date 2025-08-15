@@ -18,6 +18,7 @@ dependencies = [
     "newspaper3k>=0.2.8",
     "pandas>=2.3.1",
     "pydantic>=2.11.7",
+    "python-dotenv>=1.0.0",
     "requests>=2.32.4",
     "tqdm>=4.67.1",
 ]
