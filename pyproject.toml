@@ -5,7 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiohttp>=3.12.15",
     "beautifulsoup4>=4.13.4",
+    "discord>=2.3.2",
     "feedparser>=6.0.11",
     "fire>=0.7.0",
     "langchain>=0.3.27",
@@ -16,6 +18,7 @@ dependencies = [
     "pandas>=2.3.1",
     "pydantic>=2.11.7",
     "requests>=2.32.4",
+    "tqdm>=4.67.1",
 ]
 
 [dependency-groups]
