@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import re
+import unicodedata
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -136,6 +138,62 @@ class News2Discord:
         }
         return result
 
+    # ===== Deduplication utilities =====
+    @staticmethod
+    def _normalize_title(raw_title: str) -> str:
+        """
+        Normalize titles for reliable deduplication across feeds/cross-posts.
+
+        - Apply NFKC to reduce fullwidth/halfwidth inconsistencies
+        - Lowercase
+        - Collapse all whitespace to single spaces
+        - Strip leading/trailing whitespace
+        """
+        if not raw_title:
+            return ""
+        normalized = unicodedata.normalize("NFKC", str(raw_title))
+        normalized = normalized.lower()
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return normalized
+
+    def _deduplicate_by_title_keep_oldest(
+        self, items: List[OutputRecord]
+    ) -> List[OutputRecord]:
+        """
+        Deduplicate items by normalized title. When duplicates exist, keep the
+        item with the oldest published_jst. If publish time is identical, keep
+        the first encountered to avoid emitting duplicates.
+        """
+        title_to_item: Dict[str, OutputRecord] = {}
+        for item in items:
+            key = self._normalize_title(item.get("title", ""))
+            # If title is empty after normalization, skip dedup by title
+            if not key:
+                # Use a synthetic unique key to preserve the item
+                synthetic_key = f"__empty_title__::{item.get('url', '')}::{item.get('published_jst')}"
+                title_to_item.setdefault(synthetic_key, item)
+                continue
+
+            existing = title_to_item.get(key)
+            if existing is None:
+                title_to_item[key] = item
+                continue
+
+            existing_ts = existing.get("published_jst")
+            current_ts = item.get("published_jst")
+            try:
+                if current_ts < existing_ts:  # type: ignore[operator]
+                    # Prefer older publish time
+                    title_to_item[key] = item
+            except Exception:
+                # If comparison fails for any reason, keep the existing one
+                continue
+
+        # Return items sorted so older ones are processed first
+        deduped = list(title_to_item.values())
+        deduped.sort(key=lambda x: x.get("published_jst"))
+        return deduped
+
     # ===== Main per-feed processing =====
     def _process_feed(
         self, feed: FeedConfigModel, run_time: Optional[datetime] = None
@@ -185,6 +243,8 @@ class News2Discord:
         for feed in tqdm(self.feeds, desc="Processing feeds"):
             results = self._process_feed(feed, run_time)
             fetched_feeds.extend(results)
+        # Deduplicate by title across all feeds, preferring older publish times
+        fetched_feeds = self._deduplicate_by_title_keep_oldest(fetched_feeds)
         for item in tqdm(fetched_feeds, desc="Processing articles"):
             # Replace with actual downstream processing (e.g., Discord notify)
             if item.get("text"):
